@@ -1,0 +1,34 @@
+name: Decompile and Auto Push 🫡
+on:
+  push:
+    paths:
+      - 'target/*.apks'
+      - 'target/*.apk'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # リポへの書き込み権限
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install JADX 🛠️
+        run: |
+          wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip
+          unzip jadx-1.5.0.zip -d jadx_bin
+          echo "a: jadx_ready"
+
+      - name: Run Decompiler 🔓
+        run: |
+          mkdir -p analyzed_java_files
+          ./jadx_bin/bin/jadx -d analyzed_java_files target/*.apks || ./jadx_bin/bin/jadx -d analyzed_java_files target/*.apk
+          echo "a: decompile_finished"
+
+      - name: Git Push Changes 🚩
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add analyzed_java_files/
+          git commit -m "Update analyzed java files 🫡" || exit 0
+          git push
