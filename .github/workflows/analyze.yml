@@ -4,31 +4,47 @@ on:
     paths:
       - 'target/*.apks'
       - 'target/*.apk'
+  release:
+    types: [published] # Releaseが公開されたら発動
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # リポへの書き込み権限
+      contents: write # 抽出したJavaをPushするために必要
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get Release Asset URL 🔗
+        id: get_asset
+        run: |
+          # 2025-10-27 指示: 値が確定したときに出力
+          ASSET_URL=$(curl -s https://api.github.com/repos/${{ github.repository }}/releases/latest | jq -r '.assets[] | select(.name | endswith(".apks") or endswith(".apk")) | .browser_download_url' | head -n 1)
+          echo "a: asset_url_found: $ASSET_URL"
+          echo "url=$ASSET_URL" >> $GITHUB_OUTPUT
+
+      - name: Download Asset 📦
+        run: |
+          mkdir -p target
+          wget -O target/app.apks "${{ steps.get_asset.outputs.url }}"
+          echo "a: download_complete"
 
       - name: Install JADX 🛠️
         run: |
           wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip
           unzip jadx-1.5.0.zip -d jadx_bin
-          echo "a: jadx_ready"
+          echo "a: jadx_installed"
 
       - name: Run Decompiler 🔓
         run: |
           mkdir -p analyzed_java_files
-          ./jadx_bin/bin/jadx -d analyzed_java_files target/*.apks || ./jadx_bin/bin/jadx -d analyzed_java_files target/*.apk
+          ./jadx_bin/bin/jadx -d analyzed_java_files target/app.apks
           echo "a: decompile_finished"
 
-      - name: Git Push Changes 🚩
+      - name: Git Push Analyzed Java 🚩
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add analyzed_java_files/
-          git commit -m "Update analyzed java files 🫡" || exit 0
+          git commit -m "Auto-decompile from Release: ${{ github.event.release.tag_name }} 🫡" || exit 0
           git push
